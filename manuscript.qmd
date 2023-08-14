@@ -1,0 +1,406 @@
+---
+title: "The perception of illusory faces in examples of face pareidolia is supported by high spatial frequency content"
+subtitle: | 
+    Patrick Guinane$^{1}$, Jessica Taubert$^{2}$, and Deborah Apthorp$^{1,3}$ \
+    \
+    $^1$School of Psychology, University of New England \
+    $^2$School of Psychology, University of Queensland \
+    $^3$School of Computing, Australian National University
+    
+format:
+  docx:
+    reference-doc: apa7-reference-doc.docx
+output-file: Pareidolia-SF.docx
+bibliography: Spatial Frequencies and Pareidolia.bib
+csl: apa.csl
+abstract: |
+    ### Abstract
+    
+     The ability to detect and process faces is a skill that is crucial to human interaction. Many of the mechanisms than underlie face perception are thought to be specialised, yet there is still much that is unknown about the fundamental features. Face pareidolia, or the tendency to spontaneously see faces in non-face objects, is thought to make use of many of the same neural and cognitive mechanisms in this system. The visual system processes faces dependent upon their spatial frequency content. The information carried in these frequencies is also thought to affect how we detect and process a face’s emotional expression. This study aimed to explore the visual features that allow face pareidolia to be perceived as face-like. Face pareidolia images were parsed into high and low spatial frequency versions and the resulting effects on their face-likeness and emotional expression were recorded. Results indicated that overall, high spatial frequencies are most important for carrying the facial information in illusory faces. Furthermore, happy faces were rated significantly more face-like than angry faces, and high spatial frequencies were most important for conveying anger. These findings indicate that there are both similarities and differences in how face pareidolia and real faces are processed. 
+    
+    <br>
+    
+    _Keywords:_ Face processing, pareidolia, spatial frequency
+---
+
+```{r, eval=F, echo=F}
+# This area is reserved for technical comments
+
+Last update of apa.csl: 2022-10-02 (Fetched from the Zotero Style Repository)
+Last update of template.rmd: 2022-12-10
+Last update of apa_style_reference_document.docx: 2022-12-10
+
+author:
+  - name: Patrick Guinane
+    affiliations:
+      - School of Psychology, University of New England
+    email: pguinan2@myune.edu.au
+    corresponding: false
+    
+  - name: Jessica Taubert
+    affiliations:
+      - University of Queensland
+    orcid: 0000-0002-6519-8068
+    email: j.taubert@uq.edu.au
+    corresponding: false
+    
+    - name: Deborah Apthorp
+      affiliations:
+      - School of Psychology, University of New England
+      - Australian National University
+    orcid: 0000-0001-5785-024X
+    email: dapthorp@une.edu.au
+    corresponding: true
+
+```
+
+```{r setup, include = FALSE}
+library(readr)
+library(tidyverse)
+library(raincloudplots)
+library(readxl)
+library(janitor)
+library(dplyr)
+library(afex)
+library(emmeans)
+library(tidyr)
+library(reshape2)
+library(rstatix)
+library(lme4)
+
+```
+
+```{r analysis-preferences, include = FALSE, echo = FALSE}
+# Seed for random number generation
+set.seed(42)
+knitr::opts_chunk$set(cache.extra = knitr::rand_seed)
+
+
+```
+
+```{r import and wrangle data, include = FALSE, echo = FALSE}
+ParData <- read_excel("FINAL DATA_201222.xlsx")
+ParData <- ParData %>%
+  clean_names() # make names nicer for analysis
+
+## SF analysis 
+ParData$sf <- ParData$sf -1 # Subtract 1 from SF to make it 1 and 0
+
+ParData_sf_means <- aggregate(data=ParData, sf ~ id + emotion, FUN="mean")
+# Then get the mean of SF to give proportion "high SF"
+
+ParData_sf_means <- rename(ParData_sf_means, "prop_high" = sf) # rename the column to make more sense
+
+
+## Rating analysis 
+ParData <- ParData %>%
+  mutate(sf = case_when(sf == 0 ~ 'Low',
+                              TRUE ~ 'High')) # Change to labels for SF
+ParData_means <- aggregate(data=ParData, face_rating ~ id + emotion + sf, FUN="mean") # Get mean face ratings
+
+
+```
+
+```{r ANOVAs, include = FALSE, echo = FALSE, results = 'asis'}
+# Do ANOVA analysis of proportion high SF 
+sf_ANOVA_analysis <- aov_ez("id", "prop_high", ParData_sf_means, within=c("emotion"),
+                                    factorize = TRUE)
+EM_Means_sf <- emmeans (sf_ANOVA_analysis, ~emotion)
+
+t_test_SF <- t.test(prop_high ~ emotion, data = ParData_sf_means, paired = TRUE)
+effectSizeSF <- ParData_sf_means %>% cohens_d(prop_high ~ emotion, paired = TRUE)
+
+
+# Do ANOVA analysis of ratings 
+FaceRating_ANOVA_analysis <- aov_ez("id", "face_rating", ParData_means, within=c("emotion", "sf"),
+                            factorize = TRUE) # Do ANOVA
+
+EM_Means_FaceRatings <- emmeans (FaceRating_ANOVA_analysis, ~ sf|emotion) # Get EM Means
+
+## Mixed model version - the ANOVA table for this replicates exactly the results in the paper, hooray! 
+model <- mixed(face_rating ~ 1 + sf + emotion + sf:emotion + (1|id), data = ParData, control = lmerControl(optimizer = "bobyqa"), method = 'LRT')
+
+```
+
+```{r wrangle data for raincoud plots, echo = FALSE}
+happy_low <- filter(ParData_means, emotion =="happy", sf =="Low")
+happy_high <- filter(ParData_means, emotion =="happy", sf =="High")
+angry_low <- filter(ParData_means, emotion =="angry", sf =="Low")
+angry_high <- filter(ParData_means, emotion =="angry", sf =="High")
+
+df_2x2_ratings <- data_2x2(
+  array_1 = happy_low$face_rating,
+  array_2 = angry_low$face_rating,
+  array_3 = happy_high$face_rating,
+  array_4 = angry_high$face_rating,
+  labels = (c('Low SF','High SF')),
+  jit_distance = .09,
+  jit_seed = 321,
+  spread_x_ticks = FALSE) 
+
+FaceRatings <- raincloud_2x2_repmes(
+  data = df_2x2_ratings,
+  colors = (c('dodgerblue', 'darkred', 'dodgerblue', 'darkred')),
+  fills = (c('dodgerblue', 'darkred', 'dodgerblue', 'darkred')),
+  size = 1,
+  alpha = .6,
+  spread_x_ticks = FALSE) +
+  
+  scale_x_continuous(breaks=c(1,2), labels=c("Low", "High"), limits=c(0, 3)) +
+  xlab("Spatial frequency") + 
+  ylab("Face-likeness rating") +
+  theme_classic()
+
+happy <- filter(ParData_sf_means, emotion =="happy")
+angry <- filter(ParData_sf_means, emotion =="angry")
+
+
+df_1x1_sf <- data_1x1(
+  array_1 = happy$prop_high,
+  array_2 = angry$prop_high) 
+
+
+SF_plot <- raincloud_1x1_repmes(
+  data = df_1x1_sf,
+  colors = (c('dodgerblue', 'darkred')),
+  fills = (c('dodgerblue', 'darkred')),
+  line_color = 'gray',
+  line_alpha = .3,
+  size = 1,
+  alpha = .6,
+  align_clouds = FALSE) +
+  
+  scale_x_continuous(breaks=c(1,2), labels=c("Happy", "Angry"), limits=c(0, 3)) +
+  xlab("Emotion") + 
+  ylab("Proportion high SF chosen") +
+  theme_classic()
+
+```
+
+### Using Pareidolia to Explore the Fundamental Features of Face Perception
+
+The ability to detect and interpret faces is fundamental to human communication. Faces convey complex information about a person’s identity, intention and emotional state, as well as other cues that inform our initial impression of someone and how we choose to behave towards them [@haist_functional_2017]. This impressive capability for finding and extracting such information from faces is thought to be subserved by specialised cognitive and neural mechanisms [@kanwisher_domain_2000; @omer_what_2019], but there is still considerable debate about whether these mechanisms are specialized for face perception per se, or whether a more simple explanation is that these mechanisms are responsive to image properties that occur in human faces, such as bilateral symmetry, round shapes, or skin colours and textures (REF).
+
+
+#Research suggests that faces are perceived holistically, in a unified percept, and are preferentially detected in our visual field [@young_configurational_1987; @takahashi_seeing_2015]. Developmental studies have shown that at less than 24 hours of age, newborns look longer at face-like stimuli [@viola_macchi_can_2004]. Primate research has also shown that non-human primates display prioritised attention to faces [@taubert_face_2017]. Such findings provide some of the strongest evidence for the existence of an innate cognitive template that prioritises the perception of face-like patterns [@omer_what_2019; @wilkinson_staring_2014]. This proposed system underpins the dominant theory of face detection in cognitive neuroscience [@wilkinson_staring_2014]. Despite this, there is still much to be discovered about the underlying features of this system.
+
+#A phenomenon that may provide insights into this network is that of face pareidolia, whereby faces are spontaneously perceived in non-face objects such as clouds, rock formations or façades of buildings (see @fig-pareidolia-faces; @jeantet_factors_2018). Pareidolia can be thought of as a false-positive in our face detection system, in which the same specialised neural and cognitive mechanisms are engaged despite the lack of a real human face [@palmer_face_2020]. This is supported by neuroimaging [@akdeniz_brain_2020; @hadjikhani_early_2009; @liu_seeing_2014; @wardle_rapid_2020] and behavioural [@alais_shared_2021; @caruana_objects_2022; @keys_visual_2021; @palmer_face_2020; @takahashi_seeing_2015] studies, which have shown that we process pareidolia stimuli in much the same way as human faces. This naturally-occurring glitch may thus provide a window into the fundamentals of face detection. Specifically, the ways in which these objects are processed as face-like may allow for insights as to what is needed to register a stimulus as a face in terms of an innate cognitive face template.
+
+A new approach that is being used to shed light on the tuning properties of face-selective mechanisms involves measuring the neural correlates of face pareidolia. Face pareidolia is the common misperception of illusory faces in ordinary objects (see @fig-pareidolia-faces). Our perception of face pareidolia is thought to be informative because, despite the differences that exist between examples of face pareidolia and real faces at the image level, they trigger the behavioural signature of face detection in human [@keys_visual_2021; @caruana_objects_2022] and nonhuman primates [@taubert_face_2017], and they elicit more activity than ordinary non-face objects from face-selective mechanisms in the primate brain [@decramer_single-unit_2021; @rekow_rapid_2022; @taubert_amygdala_2018; @taubert_cortical_2022; @wardle_rapid_2020]. However, there have been few attempts to quantify the basic image properties that give rise to these illusory faces.
+
+::: {#fig-pareidolia-faces}
+![](images/face-examples.png)
+
+Examples of pareidolia face images. From 'Faces in Places', 2022 <https://www.flickr.com/groups/facesinplaces/pool/>. In the public domain.
+:::
+
+#Whilst our inborn ability for detecting and processing faces is reasonably well studied, there is still much that remains unknown about the inherent turning properties [@jeantet_factors_2018]. A feature of this system that has been established, however, is that it is primarily relies on low spatial frequencies [@de_heering_newborns_2008; @goffaux_faces_2006]. Whenever we view a scene, object, image, or face, the visual signal may be decomposed by the Fourier transform into a set of sinusoidal components with amplitude, phase and orientation (see @fig-fourier; @jeantet_factors_2018). The spatial frequency is defined as the extent to which these variations in light repeat over distance (see @fig-sf). In the context of faces, low spatial frequencies carry much of the coarse, global face information whereas high spatial frequencies carry the fine, featural details (see @fig-sf-faces; @goffaux_faces_2006). This functional divide is thought to reflect the anatomical differences in how we process this visual information [@skottun_use_2015]. Specifically, low spatial frequencies are carried by the dorsal stream - a pathway of magnocellular cells responsible for the rapid processing of low contrast and nonchromatic information. Conversely, high spatial frequencies are conveyed by the ventral stream - a pathway of parvocellular cells that processes finer detail and colour, but at a lower temporal frequency [@skottun_use_2015].
+
+#For most research, the convention for low spatial frequency is to filter at less than 8 cycles per degree of visual angle, whereas high spatial frequency is often above 26 or 32 cycles per degree of visual angle [@jeantet_factors_2018]. Visual stimuli are often manipulated using these parameters to gain insights into basic features of visual processing [@ruiz-soler_face_2006].
+
+<!--# This is Jess's version of the Intro  -->
+
+Numerous findings have indicated that the initial processing of human faces is dependent on low-spatial frequency content [@de_heering_newborns_2008; @goffaux_faces_2006], with researchers arguing that this dependency reflects rapid processing in a subcortical route with low visual fidelity [@jeantet_factors_2018]. Since there has been a clear indication that face pareidolia also drives activity in this subcortical route [@taubert_amygdala_2018; @guillon_intact_2016], it follows that the perception of illusory faces in examples of face pareidolia might be carried by low spatial frequency content. Here, our primary goal was to test this hypothesis and determine whether the illusory faces that emerge spontaneously in examples of face pareidolia are carried by low spatial frequency content. 
+
+However, examples of face pareidolia are spontaneous in nature and tend to vary in a number of socio-emotional cues that are thought to be mediated by spatial frequency content. For example, illusory faces vary in their facial expressions [@alais_shared_2021; @wardle_illusory_2022] and gaze direction [@palmer_face_2020]. There is a longstanding presumption in cognitive neuroscience that emotional valence (either positive, happy expressions or negative, threatening expressions) are carried by low spatial frequencies, though empirical findings have been mixed. Inconsistencies may be, in part, due to a large proportion of these studies using posed expressions, lacking in spontaneity and ecological validity [@dawel_systematic_2021]. Further, some researchers have filtered their stimuli using imprecise methods available in point-and-click software packages. These filters might lack the accuracy that is necessary for inferences about spatial frequency content because they operate on pixel radius as opposed to cycles per frame.
+
+
+
+<!--# I think this tends to be 8 cycles per IMAGE, which is usually several degrees. -->
+
+::: {#fig-fourier}
+![](images/fourier.png)
+
+An illustration of Fourier decomposition. Any image can be decomposed into individual components with amplitude, phase and orientation. These are then broken down by early visual processes into discrete signals that represent luminance over space.
+:::
+
+::: {#fig-sf}
+![](images/sf.png)
+
+An illustration of spatial frequency: variations in light represented as sinusoidal waves.
+:::
+
+::: {#fig-sf-faces}
+![Full spectrum face](images/face_sf.png)
+
+Examples of greyscale unfiltered, low-pass filtered and high-pass filtered faces.
+:::
+
+
+Spatial frequency content not only influences our ability to detect and interpret faces, but also appears to mediate our interpretation of their emotional expressions [@jennings_role_2017]. Earlier research into this area suggested that positive emotions are primarily carried by low spatial frequencies, whereas negative emotions are carried by high spatial frequencies [@adolphs_mechanism_2005; @phaf_affective_2005]. More recently, however, findings have been mixed, with both high and low spatial frequencies shown to interact with a full range of emotional expressions and intensities. Several reasons for this have been proposed, with some researchers suggesting that it is perhaps the emotional complexity that is dependent on spatial frequencies, rather than the expression [@jennings_role_2017; @cassidy_decoding_2022]. However, these findings too have been varied, and more research is needed to further understand the tuning properties of systems responsible for detecting and categorising emotion in faces.
+
+<!--# probably need more detail here about why findings are varied. -->
+
+## Pareidolia and Face Processing
+
+Understanding the mechanisms that underlie face processing has become one of the most intensively studied areas in psychology and neuroscience [@bruce_face_2011]. This has led to the identification of a distributed network of cortical and subcortical regions that are associated with the detection and processing of faces [@akdeniz_brain_2020; @grill-spector_functional_2018; @omer_what_2019]. There is a now growing body of research that suggests face pareidolia relies on many of the same neural substrates. Studies have explored face pareidolia using magnetoencephalography [MEG\; @hadjikhani_early_2009] and electroencephalography [EEG\; @akdeniz_brain_2020; @nihei_brain_2018; @rekow_rapid_2022], finding that illusory face stimuli evoke activation within the fusiform face area (FFA), an area primarily implicated in classical face detection. Research utilising functional magnetic resonance imaging (fMRI) has also recorded similarities in the way the brain processes pareidolia and classic face stimuli [@liu_seeing_2014; @ocraven_mental_2000; @voss_potato_2012; @wardle_rapid_2020]. However, differences in these processes have also been recorded, with research showing that the initial 'face-like' response to illusory faces occurs later [@hadjikhani_early_2009], and resolves faster [@wardle_rapid_2020] when compared to that of real faces. This indicates that whilst our visual system does appear to rapidly interpret illusory faces in a similar way to real faces, there may also be an early differentiation between the two.
+
+Behavioural research has demonstrated that face pareidolia and face perception also share numerous cognitive mechanisms. These include prioritised detection - the tendency of faces to be preferentially attended, easy to detect and difficult to ignore [@caruana_objects_2022; @keys_visual_2021], gaze queuing - the specialisation for encoding the direction of another person's attention based on their gaze [@alais_shared_2021; @palmer_face_2020; @takahashi_seeing_2015] and serial dependence - a cognitive phenomenon in which perception of an object is biased toward recent sensory input [@alais_shared_2021; @fischer_serial_2014]. The ability for illusory face perception to display these cognitive tendencies supports the notion that they are essentially 'breaking in' to our face processing network.
+
+Research into face perception has historically relied on highly standardised images of faces [@dawel_children_2015]. These 'posed' images have been primarily generated by asking models to communicate certain emotional states with exaggerated expressions that are widely agreed upon. Despite allowing for a high level of experimental control, the use of such stimuli has been criticised for not being reflective of the full repertoire of real-world, spontaneous facial expressions [@dawel_children_2015]. Studies have shown that we perceive and respond to posed stimuli differently than we do for images showing natural, or ambient, expressions [@aviezer_body_2012; @dawel_children_2015]. The ability for pareidolia to naturally and spontaneously engage our face detection system may then offer a possible alternative for using posed face stimuli. Furthermore, the visual properties that allow for a non-face stimulus to infiltrate this system that is tuned to detect faces may allow for unique insights into its innate tuning properties.
+
+<!--# Not sure this paragraph is really relevant. -->
+
+## Spatial Frequencies and Face Perception
+
+The human visual system is tuned to process visual information based on spatial frequency content, with faces in particular appearing to be more sensitive to this than other objects [@williams_sensitivity_2009]. Studies into the elementary mechanisms of face perception have examined face processing through this lens [@awasthi_faster_2011; @cheung_revisiting_2008; @de_gardelle_how_2010; @liu_seeing_2014; @goffaux_faces_2006}; @jeantet_factors_2018; @lacroix_predictive_2022]. Early research in this area suggested that holistic face information (that is, the face is interpreted as a unified percept) is carried by low spatial frequencies, whereas feature based processing (the individual features such as eyes, nose and mouth) is carried by high spatial frequencies [@ellis_microgenesis_1986]. The role of low spatial frequencies in unified face perception was supported by  @goffaux_faces_2006 in a series of experiments that used paradigms in which the recognition of a face part is influenced by the other face parts. These included the whole/part advantage and the composite face effect. In a later study, @cheung_revisiting_2008 and colleagues successfully replicated the composite face effect experiment section of the study. Similarly, @awasthi_faster_2011 demonstrated the visual system's initial preference for low frequencies in a study that used composite images of faces and natural scenes of different frequencies.
+
+A paradigm that has been used for exploring the processing of featural information is the face inversion effect, as this has been shown to interfere with the processing of configural information (that is, the spatial relations between features), not the features themselves [@boutet_configural_2003]. A study by @flevaris_using_2008 was able to show that the face inversion effect was present in low spatial frequency conditions only, as featural processing is not carried by these frequencies. Similarly, @goffaux_respective_2005 found that manipulating configural information only affected stimuli when presented in low spatial frequencies, whereas the manipulation of featural information affected the interpretation of high spatial frequency filtered stimuli.
+
+## Spatial Frequencies and Emotion Perception
+
+Facial expressions are the primary source of information about an individual's emotional state. Similar to face detection, the processing of emotional expression is thought to be supported by specialised neural regions [@pitcher_human_2020]. Faces convey emotion through the movement of complex muscle arrays, resulting in incredibly rich visual stimuli [@calvo_perceptual_2016]. How the human visual system is tuned to processes this information, however, is currently not well understood [@alais_shared_2021].
+
+Numerous studies have explored the role of spatial frequencies in how we detect and perceive the emotional content of faces, with varying and often conflicting findings. Low spatial frequencies have shown to be important in processing fear [@vlamings_is_2009; @vuilleumier_distinct_2003], happiness [@kumar_emotion_2011] and pain [@wang_role_2015]. In contrast, high spatial frequencies have been associated with conveying anger [@atkinson_impact_2020; @prete_modulating_2018], fear [@smith_how_2014; @stein_rapid_2014], happiness [@mcbain_differential_2010] and sadness [@kumar_emotion_2011]. Despite the inconsistencies, the general consensus in this area of research as a whole suggests that perceived happiness is primarily driven by lower range spatial frequencies [@jeantet_factors_2018]. Conversely, the fine detail in the brow region for which the expression of anger is particularly important is conveyed at medium to high spatial frequencies (@atkinson_impact_2020; @duran_foveal_2021; @smith_transmitting_2005].
+
+The varied findings may be, in part, due to a large proportion of these studies using posed as opposed to ambient face stimuli [@dawel_systematic_2021]. Furthermore, some face researchers have displayed a tendency to use Photoshop effects (Gaussian blur for low spatial frequencies and High-pass for high spatial frequencies) for filtering their stimuli. These filters lack the accuracy that is optimal for experimental control and are manipulated via pixel radius as opposed to cycles per frame. Alternatively, @jennings_role_2017 posited that such varied findings may be due to research typically employing a limited number of basic emotional states (for example, happy versus fearful). Complex emotions are often less visible and intense, and perhaps require the fine details carried by higher spatial frequencies to facilitate decoding.
+
+ @jennings_role_2017 investigated the role of spatial frequency content across twenty four different emotional states. Expressions used were more nuanced than would typically be seen in face emotion studies, employing states such as "fantasising", "puzzled" and "convinced". However results of this study showed these estimates did not differ across spatial frequencies, with the researchers concluding this may be due to the complex interplay between the spatial frequency content in the more nuanced expressions. More recently, @cassidy_decoding_2022 conducted a study on the spatial frequency content of complex emotions including expressions such as "flirtatious" and "doubtful". Results showed high spatial frequencies would allow for more accuracy in distinguishing between the complex emotions.
+
+## Pareidolia and Emotion Perception
+
+Whilst human facial expressions are communicated via intricate muscle movements, illusory faces are able to express emotion with as little as windows on a building's façade or pin holes in a power outlet. These examples also reflect how visually diverse the stimuli can be in comparison to a human face, therefore understanding how these emotions are processed poses an interesting question. To date, the emotional response to non-face objects has been explored in the areas of product design [@lo_evaluating_2015] and architecture studies [@chalup_simulating_2010], yet few studies have focused on the mechanisms that support emotional interpretation of illusory faces. A recent study by @alais_shared_2021, however, suggests that pareidolia stimuli are not only reliably rated for expression, but that they may also engage the same cognitive mechanisms as human emotion processing. Specifically, the perceived emotion was found to illicit gaze queuing much in the same way as is observed with human faces [@alais_shared_2021].
+
+The paucity of knowledge in how we interpret the emotional content of illusory faces presents an opportunity to gain further insights into the relationship between spatial frequency and the perception of basic emotions. To date, no research has used pareidolia as a means of exploring the role of spatial frequency content in both holistic face perception and emotional expression.
+
+## Current study
+
+Research suggests that face-pareidolia can infiltrate our specialised face detection system, although little is known about the features that allow such stimuli to be perceived as face-like. Current knowledge of our innate ability to interpret faces suggests that this system is driven by low spatial frequencies. This study aims to investigate whether manipulating the spatial frequency content of pareidolia stimuli will cause to them to be perceived as more or less face-like. It is hoped that this will allow for a fuller understanding of the extent to which pareidolia stimuli are processed as real faces. Furthermore, given the complex role that spatial frequencies have been shown to play in our perception of emotion, the perceived emotional valence will be recorded. Four hypotheses are proposed:
+
+1.  In a two-alternative forced choice (2AFC) task, low spatial frequency filtered images will be preferentially selected as more face-like compared to high spatial frequency filtered images (H1).
+2.  In a separate rating task, low spatial frequency filtered images will have a significantly higher average 'face-likeness' rating than high spatial frequency filtered images (H2).
+3.  Compared to high spatial frequency happy faces, angry high spatial frequency faces will be selected as more face-like and will be rated higher on face-likeness (H3).
+4.  Angry faces are more likely to be perceived as face-like at high spatial frequencies, whereas happy faces are more likely to be perceived as face-like at low spatial frequencies (H4).
+
+# Methods
+
+## Power analysis
+
+Prior to collecting data, a power analysis was conducted using G\*Power [@faul_gpower_2007]. Using a medium to large effect size of f =.30, a critical alpha of .05 and power of .80, it was indicated that for a linear mixed model analysis, a minimum of 34 participants were required. The sample obtained (N=39) was thus considered adequate. This sample size is consistent with or exceeds those observed in similar research into pareidolia and face processing [@alais_shared_2021; @palmer_face_2020].
+
+<!--# Do we really need to include this? -->
+## Participants
+
+In total, 39 participants took part in the study, of whom 25 (64%) were female and 14 (36%) were male. Ages ranged from 22 to 65 ($M = 39.72$, $SD = 11.42$) and level of education ranged from high school to a master’s degree or doctorate, with the largest proportion holding a bachelor’s degree (62%).
+
+## Ethics statement
+
+This study was approved by the University of New England's Human Research Ethics Committee (approval no. HE22-061)
+
+## Materials
+
+The experiment was programmed using Testable (ref), a browser-based experimental software platform used for behavioural research. After giving implied consent, participants were asked to report age, gender and their highest level of education. There was no missing information in this section. The participant information sheet was provided over two frames, with a button to accept or deny participation based on the information provided. This information included the research aims, expected participation time, explanations regarding the right to withdraw, confidential collection of data and contact information of the principal supervisor.
+
+## Stimuli and Apparatus
+
+Stimuli consisted of 40 greyscale pareidolia images that were cropped to 400 $\times$ 400 pixels (see @fig-stimuli). The illusory face images used were sourced from a database of images used in other pareidolia and face perception studies [@alais_shared_2021; @taubert_face_2017]. Using custom code written in MATLAB version 2020b (see OSF Open Materials), images were parsed into both low-pass (less than 8 cycles per image) and high-pass (over 32 cycles per image) versions, using a log Gaussian filter. These parameters are consistent with those used in spatial frequency and both face and emotion processing research [@goffaux_faces_2006; @kumar_emotion_2011]. 
+
+::: {#fig-stimuli}
+![](images/stimuli.png)
+
+Examples of the full spectrum and filtered versions of the pareidolia stimuli, showing the filters they were convolved with in Fourier space. 
+
+:::
+
+## Design
+
+The experiment consisted of 40 trials, each of which consisted of three frames (see OSF Open Materials). In each trial, participants were presented with paired low and high spatial frequency filtered images and asked to select which one was more face-like in a mouse-controlled two alternative forced 2AFC design (see @fig-procedure). A following screen then asked participants to rate the selected image on a continuum from “not face” to “face”, and then another from “angry” to “happy”. These were each recorded on a mouse-controlled 7-point scale slider that was 750 pixels in width (see @fig-procedure). The experiment was self-paced and took roughly 15 minutes to complete. Upon completion, participants were presented with a frame thanking them for participating and confirmation that their data had been recorded.
+
+
+## Pilot Study
+
+To establish face-likeness ratings for each of the 40 stimuli to allow for pairing, a pilot study was first conducted with 20 participants. Using Testable, the study consisted of 40 trials in which participants were required to rate the original, unfiltered images based on how face-like they appeared, from “not face (0)” to “face (7)”. These ratings then allowed for stimuli in the main study to be paired and again assessed on face-likeness after they had been parsed into low and high spatial frequency versions.
+
+
+## Procedure
+
+In accordance with the Ethics approval, links to the study were posted on LinkedIn, Reddit and Facebook. The study was also available to first-year psychology students as part of UNE’s Research Participation Opportunities (RPOs). No financial incentives were offered to participants, although students participating as part of RPOs received course credits for completing the study. To be eligible, participants were required to have normal or corrected-to-normal vision and to be 18 years of age or older. No participants were excluded from the study.
+
+Participants were required to access the study via a desktop computer or laptop. The experiment required entering full-screen mode to commence, and a calibration screen (participants were asked to match the width of a line on the screen to the length of a credit card; see Open Materials) was used to ensure stimuli was appropriately scaled with the screen resolution of the individual screens. 
+
+<!--# This section needs sorting out. -->
+
+::: {#fig-procedure}
+![](images/procedure.png)
+
+Experimental procedure. The stimulus sequence used in each of the 40 trials. Participants selected the stimuli in the first frame by clicking directly onto either image. The following two frames used a slider for rating face-likeness (frame 2) and emotion (frame 3) and a button for progression.
+:::
+
+
+## Data analysis
+
+<!--# Everything from here down needs re-doing in R. The ANOVA results at the top probably won't do, mostly - need LMM. -->
+
+All data analyses were completed using jamovi software (version 2.3.3.0; The jamovi Project, 2022). To test H1, a single sample t-test was conducted to assess if low spatial frequency faces or high spatial frequency faces were preferentially selected in the 2AFC task. To test H2 to H4, a linear mixed model was used. The experimental design was such that participants only provided further ratings for images selected in the 2AFC task, and linear mixed models provide the ability to accommodate various configurations of grouping hierarchies [@magezi_linear_2015]. To further test H3, a paired sample t-test was used to compare the means of face-likeness ratings for high spatial frequency angry faces and low spatial frequency angry faces. Alpha values < .05 were considered significant.
+
+
+# Results
+
+A single sample t-test was performed to test whether low spatial frequency images were selected significantly more than high spatial frequency images in the 2AFC section of the experiment (H1). Results indicated that the proportion of high spatial frequency filtered images selected ($M = 0.64$, $SD = 0.12$) was significantly higher than chance ($0.5$), $t(38) = 10.76, p <.001, d = 1.22$. Therefore H1 was not supported.  
+
+
+To test whether angry high spatial frequency images were selected as more face-like than happy high spatial frequency images (H3), a paired samples t-test was performed. Results indicated the proportion of high spatial frequency angry faces selected ($M = 0.70, SD = 0.10$) was significantly higher than the proportion of high spatial frequency happy faces with a large effect size ($M = 0.58, SD = 0.10$), $t(38) = 9.87, p <.001, d = 1.58$. H3 was therefore partially supported in this case. See @fig-sf-plot for an illustration of this result. 
+
+
+```{r plot sf results, echo = FALSE}
+#| label: fig-sf-plot
+#| fig-cap: Effects plot for the proportion of high spatial frequency faces selected for happy compared to angry faces. 
+#| warning: false
+SF_plot
+
+```
+
+
+A linear mixed model analysis was run using jamovi’s GAMLj package (jamovi Project, 2022; Galucci, 2019) to assess whether the emotional expression and spatial frequency content of illusory face images predicted perceived face-likeness. Face-likeness response was included as the dependent variable with emotion and spatial frequency, as well as the interaction between emotion and spatial frequency, as the fixed effects. Participant ID was included as a random effect. The estimation method used Restricted Maximum Likelihood (REML) and Satterthwaite’s method to estimate degrees of freedom and generate p-values for mixed models. The model specification was as follows: Face rating ~ 1 + spatial frequency + emotion + spatial frequency*emotion + (1|ID).
+
+As seen in @fig-ratings, results indicated significant main effects of emotion ($\beta = 0.32, t = 4.92, p <.001$) and spatial frequency content ($\beta = 0.18, t = 2.74, p = .006$), along with an emotion by spatial frequency interaction that was also significant ($\beta = 0.13, t = -2.49, p = .013$). 
+
+To test if low spatial frequency filtered images had a significantly higher average ‘face-likeness’ rating than high spatial frequency filtered images, we examined the main effect of spatial frequency (high vs. low) in the linear mixed model for face-likeness ratings. There was a main effect of spatial frequency, high-low, $\beta = 0.18, $t = 2.74, p = .006$. However, as this showed that high SF faces were rated as more face-like, H2 was not supported. 
+To test if angry illusory faces had a significantly higher average ‘face-likeness’ rating than happy illusory faces, the main effect of emotion (happy vs. angry) in the linear mixed model for face-likeness ratings was examined. There was a main effect of emotion, happy-angry, $ \beta = 0.32, t = 4.92, p < .001$. However, as this showed that happy faces were rated as more face-like, H3 was only partially supported.
+
+To test H4, the interaction effect of spatial frequency and emotion (high vs. low $\times$ happy vs. angry) in the linear mixed model for face-likeness ratings was examined. The interaction was significant $\beta = -.33, t = -2.49, p < .013$. 
+
+Post hoc comparisons using the Bonferroni correction indicated that the mean score for the angry high spatial frequency condition ($M = 4.50$) was significantly higher than the angry low spatial frequency condition ($M = 4.15$). However, the happy high spatial frequency condition ($M = 4.66$) did not significantly differ from the happy low spatial frequency condition ($M = 4.64$). 
+
+Taken together, these results suggest that overall, happy faces are rated as more face-like, and high spatial frequency faces are rated as more face-like. Furthermore, emotion and spatial frequency interact such that high spatial frequency angry faces are rated more face-like than low spatial frequency angry faces, but this difference is not observed in happy faces (see @fig-ratings). Therefore, H4 was partially supported.
+
+
+
+```{r plot face ratings, echo = FALSE}
+#| label: fig-ratings
+#| fig-cap: Effects plot for the rating tasks. The angry high spatial frequency condition was significantly different from the angry low spatial frequency condition, whereas happy faces remained somewhat stable in both spatial frequency conditions.
+#| warning: false
+FaceRatings
+```
+
+# Discussion 
+
+This study aimed to investigate whether manipulating the spatial frequency content of pareidolia stimuli would cause to them to be perceived as more or less face-like. The resulting effects on the perception of their emotional expressions was also explored. We hypothesised that low spatial frequency filtered faces would be preferentially selected as more face-like compared to high spatial frequency images (H1). Furthermore, in a separate rating task, we proposed that low spatial frequency filtered faces would be rated as more face-like that high spatial frequency faces (H2). Emotion was predicted to have an effect on face-likeness, such that angry high spatial frequency filtered faces should be more likely to be selected as face-like and to be rated higher on face-likeness than happy faces (H3). The spatial frequency content and emotional content were predicted to interact, such that that angry faces were more likely to be perceived as face-like in the higher spatial frequency range, whereas happy faces were more likely to be perceived as face-like in the low spatial frequency range (H4).
+
+Results showed that when presented with illusory images of similar face-likeness (as determined in the pilot study), participants were more likely to select the high spatial frequency face over the low spatial frequency face when asked to pick which was more face-like. Similarly, in a separate rating task, participants rated high spatial frequency pareidolia images as significantly more face-like than low spatial frequency images. This is in contrast to what was predicted, and thus H1 and H2 were not supported. These findings suggest that the facial information in face pareidolia may be carried by high spatial frequencies. Whilst existing research has not focused specifically on the spatial frequency content of illusory faces, these findings are in contrast to those in human face perception that suggests the unified, or global face information that drives our face processing system is carried by low spatial frequencies [@ellis_microgenesis_1986; @awasthi_faster_2011; @cheung_revisiting_2008; @goffaux_faces_2006; @jeantet_factors_2018]. This indicates that the processing of pareidolia and human faces, whilst sharing several common neural and cognitive mechanisms [@alais_shared_2021; @akdeniz_brain_2020; @caruana_objects_2022; @hadjikhani_early_2009, @takahashi_seeing_2015], may also differentiate in the way the respective information is processed by the visual system. 
+
+	
+In the 2AFC task, angry high spatial frequency faces were significantly more likely to be selected as face-like compared to happy high spatial frequency images. This is consistent with what was predicted in H3. However, given that happy faces were found to be rated as more face-like overall for both emotion conditions, the prediction that angry high spatial frequency faces would be rated higher than happy faces was not supported. Therefore H3 was only partially supported. These findings suggest that the processing of emotion in pareidolia does appear to be modulated by spatial frequency content, such that anger appears to be primarily carried by high spatial frequencies. This is consistent with existing research that has shown the fine featural information around the eyes and brow in particular to be highly instrumental in conveying anger [@atkinson_impact_2020; @duran_foveal_2021; @smith_transmitting_2005]. The tendency for happy faces to be selected as more face-like than angry faces for both spatial frequency conditions suggests that emotion may play a more significant role in carrying face information than spatial frequency content in the perception of illusory faces. Whilst these two effects have been shown to modulate the processing of faces individually [@goffaux_faces_2006; @hamann_individual_2004], to our knowledge this is the first time the effects have been compared in their simultaneous effect on face-likeness. Furthermore, emotion and spatial frequency content were shown to interact such that high spatial frequency angry faces were rated significantly more face-like than low spatial frequency faces. This was not found in happy faces, however, with no significant difference found in happy faces between spatial frequency conditions. This means that H4 was partially supported. 
+
+
+The tendency for high spatial frequency images to be selected as face-like overall may be a reflection of the differences in the visual content of human face and illusory face images. The hypotheses above were formulated based on the demonstrated divide of holistic and featural face information in spatial frequency studies [@goffaux_respective_2005; @goffaux_faces_2006]. Human faces, whilst visually rich, are structurally homogeneous, in that features are always organised in similar configurations [@dakin_biological_2009]. In contrast, the visual scenes in which illusory faces can be evoked are incredibly diverse, with the configural information varying significantly between images. Perhaps then, pareidolia relies far more on this featural information, that is, the visual information pertaining to the individual facial features of the eyes, nose and mouth. As featural information is primarily carried by high spatial frequencies [@boutet_configural_2003; @flevaris_using_2008; @goffaux_respective_2005], this offers a potential explanation for the findings of our study. 
+
+
+A further proposed explanation for the preference for high spatial frequency images is the use of a self-paced design. Whilst the visual information in the low spatial frequency ranges have been shown to carry face processing system [@goffaux_faces_2006], this information is processed rapidly, with many of the experiments in this area using paradigms that are time sensitive [@de_gardelle_how_2010; @freud_highs_2015;  @goffaux_respective_2005]. Given this experiment required the processing of illusory stimuli that varied in their degree of face-likeness, more contemplation was required than may have been present in conventional face processing research. This extended time may then have benefited from the fine detail carried within the high spatial frequency range.
+
+The finding that happy faces were rated as significantly more face-like overall may be further reflection of the unique nature of the visual content of face pareidolia in comparison to real faces. Research has shown that the less realistic a face, the more exaggerated the expression is required for it to be perceived as face-like [@makarainen_exaggerating_2014]. The reliance of angry faces on high spatial frequencies suggest that compared to happy faces, there is more subtlety in the way anger is conveyed in illusory faces and as such they were considered less face-like.
+
+
+## Limitations 
+
+As mentioned above, the use of a self-timed design may have been both a limitation and a strength. The ability to deeply consider responses in the trials may have allowed for more considered face-likeness and emotion rating responses, although this may have then caused a bias for the reliance on high spatial frequencies. Therefore, including response times as a variable in this study, or using a time-limited paradigm, may have allowed for a deeper understanding of the roles of spatial frequencies in the face-likeness and emotion perception.  
+
+Another limitation is that the convenience sample used was predominantly female (N = 39, 25 (64%) female and 14 (36 %) male). Research has indicated that individual differences can influence both the way we interpret emotion [@hamann_individual_2004], our biases for processing spatial frequencies [@langner_socially_2015] as well as our ability to detect faces in non-face objects [@proverbio_women_2016]. The propensity to detect illusory faces in particular has been shown to significantly differ between males and females, with research indicating females both perceive pareidolia more readily and detect more faces in objects overall than males [@pavlova_face-n-food_2015]. The over-representation of female participants may have therefore affected the generalisability of the findings. 
+
+## Conclusion
+
+This study set out to explore the visual features that allow face pareidolia to be perceived as face-like. The spatial frequency content of illusory face stimuli was manipulated and the resulting effects on face-likeness and emotional expression were recorded. The results indicated that overall, high spatial frequencies are most important for carrying the facial information in illusory faces. Furthermore, the emotional expression of face pareidolia is important in that happy faces were rated as significantly more face-like than angry faces. Spatial frequencies and emotion were also observed to interact such that high spatial frequencies were most important for conveying anger. These findings indicate that there are both similarities and unique differences in the way we process face pareidolia and human faces. Future research in this area could explore a way of standardising pareidolia stimuli such that the configural information is similar between stimuli used. This may then allow for a fuller understanding of the similarities between illusory face and human face processing. Moreover, the inclusion of response times in paradigms that record face-likeness may allow for a deeper understanding of the roles of spatial frequencies in pareidolia perception. 
+
+
+
+# References
